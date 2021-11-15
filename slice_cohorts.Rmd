@@ -1,0 +1,11 @@
+---
+title: "Slice Cohorts"
+output: html_notebook
+---
+
+Loading Dataset
+```{r}
+df <- read.csv('/Users/jparks/Desktop/orders.csv')
+```
+
+
