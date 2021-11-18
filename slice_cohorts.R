@@ -4,7 +4,7 @@ library(tidyverse)
 library(lubridate)
 
 
-df <- read.csv('/Users/jparks/Desktop/orders.csv')
+df <- read.csv('data/orders.csv')
 
 str(df)
 head(df)
@@ -85,7 +85,7 @@ df_has_state <- df %>%
            nchar(state)==0))
 
 # get zip code data from simplemaps.com/data/us-zips
-zips <- read.csv('/Users/jparks/Desktop/uszips.csv') %>% 
+zips <- read.csv('data/uszips.csv') %>% 
   select(c('zip','state_id'))
 
 # inner join and discard mismatches, copy values to state column and drop state_id column
@@ -124,6 +124,7 @@ df <- mutate(df, order_week = floor_date(order_date,'week'))
 
 ## DATES
 
+min(df$order_date) # 2019-03-13
 max(df$order_date) # 2020-05-11
 
 # trim df to last day of April 2020
@@ -188,6 +189,8 @@ orders_week_plt <-
   geom_line() +
   geom_smooth(color='green')
 
+orders_date_plt
+
 orders_week_plt
 
 # looks like a weekly business cycle, some seasonal dips around winter holidays, overall increasing trend.
@@ -212,9 +215,14 @@ df <- mutate(df, has_promo_value = ifelse(promo_value == 0, FALSE, TRUE))
 
 ## RESTAURANT_TOTAL (Revenue)
 
-select(df, restaurant_total) %>% 
-  distinct(restaurant_total) %>% 
-  ggplot(aes(x=restaurant_total)) + geom_histogram()
+
+restaurant_total_plt <- df %>%
+  select(c(shops_id,restaurant_total)) %>%
+  group_by(shops_id) %>%
+  summarize(rest_revenue = round(sum(restaurant_total))) %>%
+  ggplot(aes(x=rest_revenue)) + geom_histogram()
+
+restaurant_total_plt
 
 
 ## SHIPPING_TYPE
@@ -272,9 +280,21 @@ orders_state <- group_by(df, state) %>%
   mutate(pct=orders/n_orders) %>% 
   arrange(desc(orders))
 
+
+
+### Stop and save as transformed dataset
+df$source <- as.factor(df$source)
+df$shipping_type <- as.factor(df$shipping_type)
+df$payment_method <- as.factor(df$payment_method)
+saveRDS(df, "data/orders_corrected.rdata")
+
+
+
 #
 # COHORTS
 #
+
+df <- readRDS('data/orders_corrected.rdata')
 
 # get details of each customer's first order 
 customer_first_order <- df %>% 
@@ -282,7 +302,7 @@ customer_first_order <- df %>%
   group_by(customer) %>% 
   summarize(date_purchased = min(date_purchased)) %>% 
   left_join(df) %>% 
-  arrange(customer)
+  arrange(date_purchased, customer)
 
 # assign a cohort_id to each customer based on first order_month, join details of their first order.
 # dor now including only source, promo_value
@@ -290,15 +310,9 @@ customer_cohort <- df %>%
   select(customer, order_month) %>% 
   group_by(customer) %>% 
   summarize(cohort_id = min(order_month)) %>% 
-  left_join(select(customer_first_order, c('customer','source','promo_value','has_promo_value')), by='customer' ) 
+  left_join(select(customer_first_order, c('customer','source','has_promo_value','promo_value')), by='customer' ) 
 
-# get cohort counts
-cohort_counts <- customer_cohort %>% 
-  group_by(across(!customer)) %>% 
-  summarize(cohort_count = n()) %>% 
-  arrange(cohort_id)
-
-# get each customer_id and order_month in which they had at least 1 order .. jiun to get their cohort_id and first-order details
+# get each customer_id and order_month in which they had at least 1 order .. join to get their cohort_id and first-order details
 customer_activity <- df %>% 
   select('customer','order_month') %>% 
   group_by(customer, order_month) %>% 
@@ -349,6 +363,12 @@ cohort_activity %>%
 
 
 # everyone
+
+# get cohort counts
+cohort_counts <- customer_cohort %>% 
+  group_by(across(!customer)) %>% 
+  summarize(cohort_count = n()) %>% 
+  arrange(cohort_id)
 
 cohort_counts_all <- cohort_counts %>% 
   group_by(cohort_id) %>% 
